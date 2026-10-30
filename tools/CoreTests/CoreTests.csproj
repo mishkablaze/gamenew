@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fast Core tests without Unity (see docs/ARCHITECTURE.md §1, D-004).
+    Compiles Raidline.Core sources and Core tests into one test assembly.
+    If Core accidentally uses UnityEngine, this project fails to compile — that is intended.
+    Target framework: override with  dotnet test -p:CoreTestsTfm=net9.0  if net8.0 SDK is missing.
+  -->
+  <PropertyGroup>
+    <CoreTestsTfm Condition="'$(CoreTestsTfm)' == ''">net8.0</CoreTestsTfm>
+    <TargetFramework>$(CoreTestsTfm)</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Raidline.Core.Tests</RootNamespace>
+    <AssemblyName>Raidline.CoreTests.Dotnet</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Assets/_Project/Code/Core/**/*.cs" />
+    <Compile Include="../../Assets/_Project/Tests/Core/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+  </ItemGroup>
+
+</Project>

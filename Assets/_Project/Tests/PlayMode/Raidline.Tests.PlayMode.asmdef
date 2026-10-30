@@ -1,0 +1,29 @@
+{
+  "name": "Raidline.Tests.PlayMode",
+  "rootNamespace": "Raidline.Tests.PlayMode",
+  "references": [
+    "Raidline.Core",
+    "Raidline.Infrastructure",
+    "Raidline.Data",
+    "Raidline.Gameplay",
+    "Raidline.AI",
+    "Raidline.Presentation",
+    "Raidline.UI",
+    "Raidline.App",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

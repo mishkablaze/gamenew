@@ -1,0 +1,19 @@
+{
+  "name": "Raidline.AI",
+  "rootNamespace": "Raidline.AI",
+  "references": [
+    "Raidline.Core",
+    "Raidline.Infrastructure",
+    "Raidline.Data",
+    "Raidline.Gameplay"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

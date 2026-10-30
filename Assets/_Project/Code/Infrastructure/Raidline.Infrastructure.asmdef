@@ -1,0 +1,16 @@
+{
+  "name": "Raidline.Infrastructure",
+  "rootNamespace": "Raidline.Infrastructure",
+  "references": [
+    "Raidline.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
