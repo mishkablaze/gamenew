@@ -9,7 +9,8 @@
     "Raidline.AI",
     "Raidline.Presentation",
     "Raidline.UI",
-    "Raidline.App"
+    "Raidline.App",
+    "FishNet.Runtime"
   ],
   "includePlatforms": [
     "Editor"

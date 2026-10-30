@@ -5,7 +5,8 @@
     "Raidline.Core",
     "Raidline.Infrastructure",
     "Raidline.Data",
-    "Raidline.Gameplay"
+    "Raidline.Gameplay",
+    "FishNet.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

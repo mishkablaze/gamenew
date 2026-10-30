@@ -14,11 +14,12 @@
 | T-003 | Структура папок и asmdef | claude | review | всё (каркас) | T-001 |
 | T-004 | Тестовая инфраструктура: dotnet CoreTests + скрипты | claude | review | tools, Tests/Core | T-003 |
 | T-005 | Установить пакеты | human | done | Packages | T-001 |
-| T-006 | Bootstrap: контексты, тик, апдейт-раннер, пулы, события, Rng | claude | todo | Core/Common, Infrastructure, App | T-003, T-004 |
+| T-006 | Bootstrap: контексты, NetworkManager (хост), тик, апдейт-раннер, пулы, события, Rng | claude | todo | Core/Common, Core/Time, Infrastructure, Gameplay/Networking, App | T-003, T-004, T-009 |
 | T-007 | URP-пресеты, слои, матрица физики | human | todo | Settings | T-005 |
 | T-008 | Ввод: InputActions, InputService, CharacterInputFrame | codex | todo | Infrastructure/Input | T-005, T-006 |
+| T-009 | Установить Fish-Net 4.7.3, ссылки в asmdef | claude | done | Packages, asmdef | T-005 |
 | **M1** | **Персонаж** | | | | |
-| T-101 | CharacterMotor: движение, присед, наклоны, инерция | claude | todo | Gameplay/Character | T-006, T-008 |
+| T-101 | CharacterMotor (предсказание Fish-Net): движение, присед, наклоны, инерция | claude | todo | Gameplay/Character | T-006, T-008 |
 | T-102 | Core: выносливость и перегруз | codex | todo | Core/Stamina | T-004 |
 | T-103 | Камера от первого лица | claude | todo | Gameplay/Character, Presentation | T-101 |
 | T-104 | Поверхности, шаги, NoiseBus | codex | todo | Gameplay/World, Presentation/Audio | T-101 |
@@ -87,7 +88,8 @@
 | T-905 | Интеграция Steamworks | codex | todo | Infrastructure/Platform | T-904 |
 | T-906 | Финальная приёмка вертикального среза | human | todo | — | все M0–M9 |
 | **M10** | **Сеть** | | | | |
-| T-1001 | Исследование сетевого стека + прототип | claude | todo | docs, прототип | T-906 |
+| T-1001 | Сетевой плейтест: второй клиент, выделенный сервер, задержка | claude | todo | Gameplay/Networking, App | T-906 |
+| T-1002 | Fish-Net Pro: компенсация задержки для PvP | human → claude | todo | Packages, Gameplay/Ballistics | T-1001 |
 
 ### Баги
 
@@ -100,6 +102,9 @@
 ## Карточки задач
 
 ### M0 — Фундамент
+
+#### T-009 · Установить Fish-Net (сделано)
+Fish-Net 4.7.3 из git (`https://github.com/FirstGearGames/FishNet.git?path=Assets/FishNet#4.7.3`), ссылки `FishNet.Runtime` добавлены в asmdef Gameplay, AI, Presentation, UI, App, Editor и тестов. Fish-Net добавил символы `FISHNET;FISHNET_V4` и `Assets/DefaultPrefabObjects.asset`. Тег 4.7.4 не использовать (D-017).
 
 #### T-001 · Установить Unity, создать проект, git + LFS, worktree
 **Сделать (человек):**
@@ -156,9 +161,11 @@
 **Сделать:**
 - Core (`Core/Common`, `Core/Time`): `EntityId`, `Rng` (детерминированный PCG/xorshift с seed; методы `NextFloat`, `Range`, `Chance`), `TickClock` (dt 1/60, максимум 4 тика за кадр, `alpha`), `EventChannel<T> where T : struct`, `Result`/коды ошибок.
 - Infrastructure: `TickRunner` с фазами из ARCHITECTURE §5 и регистрацией `ITickable` по фазе; `UpdateRunner`; `Log` с категориями и `[Conditional("RAIDLINE_DEV")]`; `ObjectPool<T>` и `ComponentPool<T>`; `ProfilerMarker` на каждую фазу.
-- App: `AppRoot` (Boot-сцена, `DontDestroyOnLoad`) создаёт `AppContext`; `Physics.simulationMode = Script`; заготовка `SceneFlow`; редакторный скрипт `Raidline/Setup/Create Boot Scene`.
+- Infrastructure: `ITickSource` и `LocalTickSource` (на `TickClock`, для тестов и инструментов без сети); `TickContext` с номером тика, `dt`, `IsServer`, `IsOwner`, `IsReplaying`.
+- Gameplay/Networking: `NetworkTickSource` — подписка на `TimeManager.OnTick` Fish-Net.
+- App: `AppRoot` (Boot-сцена, `DontDestroyOnLoad`) создаёт `AppContext`; `SessionLauncher.StartOffline()` — хост Fish-Net (Tugboat на 127.0.0.1, сервер и клиент в одном процессе); заготовка `SceneFlow`; редакторный скрипт `Raidline/Setup/Create Boot Scene`, который создаёт Boot-сцену с `NetworkManager` (TimeManager: 60 Гц, Physics Mode = TimeManager; транспорт Tugboat).
 
-**Готово, когда:** тесты Core зелёные (`TickClock`: накопление, лимит тиков, alpha; `Rng`: одинаковый seed — одинаковая последовательность; `EventChannel`: подписка, отписка, без аллокаций); Boot-сцена работает, в профайлере 60 тиков/с; в пустой сцене 0 Б GC в кадре.
+**Готово, когда:** тесты Core зелёные (`TickClock`: накопление, лимит тиков, alpha; `Rng`: одинаковый seed — одинаковая последовательность; `EventChannel`: подписка, отписка, без аллокаций); Boot-сцена запускает хост без ошибок, `TickRunner` получает 60 тиков/с от Fish-Net; в пустой сцене 0 Б GC в кадре (кроме разовых аллокаций старта).
 
 #### T-007 · URP-пресеты, слои, физика
 **Сделать (человек, по чек-листу Claude):**
@@ -180,8 +187,8 @@
 ### M1 — Персонаж
 
 #### T-101 · CharacterMotor
-**Сделать:** движение на `CharacterController` в фазе Characters по `CharacterInputFrame`: ходьба, бег, плавная высота приседа (0..1), наклоны (−1..1) с проверкой коллизии головы SphereCast, прыжок с расходом выносливости, склоны и ступени, падение с замером скорости (событие `Landed` для урона от падения в T-304). Инерция (разгон и торможение) зависит от веса через `IWeightProvider` (заглушка до T-403), скорость — от модификаторов `IMovementModifiers` (выносливость, переломы). Параметры — `MovementConfig` (SO). Чистую математику (скорость от веса и модификаторов) вынести в Core и покрыть тестами. Визуальная интерполяция между тиками.
-**Готово, когда:** в Sandbox нет дрожания при 30/60/144 FPS; ступени до 0.4 м проходятся, 0.6 м — нет; человек доволен ощущением (или замечания записаны в HANDOFF и исправлены).
+**Сделать:** `NetworkBehaviour` с предсказанием Fish-Net: `CharacterInputFrame` — Replicate-данные, состояние мотора (позиция, скорость, поза, выносливость) — Reconcile-данные; клиент-владелец предсказывает, сервер авторитетен, повтор тиков при согласовании без побочных эффектов (`IsReplaying`). Движение на `CharacterController` в фазе Characters по `CharacterInputFrame`: ходьба, бег, плавная высота приседа (0..1), наклоны (−1..1) с проверкой коллизии головы SphereCast, прыжок с расходом выносливости, склоны и ступени, падение с замером скорости (событие `Landed` для урона от падения в T-304). Инерция (разгон и торможение) зависит от веса через `IWeightProvider` (заглушка до T-403), скорость — от модификаторов `IMovementModifiers` (выносливость, переломы). Параметры — `MovementConfig` (SO). Чистую математику (скорость от веса и модификаторов) вынести в Core и покрыть тестами. Визуальная интерполяция между тиками.
+**Готово, когда:** в Sandbox (режим хоста) нет дрожания при 30/60/144 FPS; ступени до 0.4 м проходятся, 0.6 м — нет; со вторым клиентом (ParrelSync или сборка) и симуляцией задержки 100 мс в Fish-Net движение без рывков и «резинки»; человек доволен ощущением (или замечания записаны в HANDOFF и исправлены).
 
 #### T-102 · Core: выносливость и перегруз
 **Сделать:** `StaminaState`: пулы ног и рук; расход на бег и прыжок (ноги), удержание прицела и вес оружия (руки); восстановление с задержкой; состояние истощения (бег недоступен до X %); пороги перегруза (мягкий и жёсткий) → множители скорости и расхода. Параметры — `StaminaConfig` (POCO в Core, наполняется из SO).
@@ -432,5 +439,9 @@ Blender: палитра `T_Palette_Main`, модульные стены, пол�
 
 ### M10 — Сеть
 
-#### T-1001 · Исследование сетевого стека
-**Сделать:** сравнить кандидатов (Netcode for GameObjects, Fish-Net, Photon Fusion 2, при необходимости другие) по критериям: сервер-авторитет, предсказание для CharacterController, компенсация задержек для снарядов, interest management, headless Linux-сервер, стоимость, зрелость, поддержка Unity 6. Прототип: 2 клиента бегают и стреляют. Итог — ADR в DECISIONS и план вехи M10.
+#### T-1001 · Сетевой плейтест и выделенный сервер
+**Сделать:** стек уже выбран (Fish-Net, D-017). Запустить рейд с 2–4 клиентами против хоста, затем headless Linux-сервер (define `RAIDLINE_SERVER`, без Presentation и UI); замерить трафик и нагрузку сервера при 25 ботах; найти и завести баги рассинхронизации. Итог — план вехи M10 в PLAN.
+
+#### T-1002 · Fish-Net Pro: компенсация задержки
+**Сделать:** человек покупает Fish-Net Pro и ставит его вместо бесплатной версии (они конфликтуют, бесплатную сначала удалить). Claude подключает `RollbackManager` и `ColliderRollback` к хитбоксам (T-206) и откат на время выстрела в серверной баллистике (T-202).
+**Готово, когда:** при пинге 150 мс попадания по бегущей цели засчитываются там, где их видел стрелок.

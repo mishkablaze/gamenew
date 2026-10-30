@@ -4,7 +4,8 @@
   "references": [
     "Raidline.Core",
     "Raidline.Infrastructure",
-    "Raidline.Data"
+    "Raidline.Data",
+    "FishNet.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

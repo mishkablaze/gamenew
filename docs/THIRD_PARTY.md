@@ -4,4 +4,4 @@
 
 | Название | Автор / источник (URL) | Где лежит | Лицензия | Коммерческое использование | Добавил, дата |
 |---|---|---|---|---|---|
-| — | | | | | |
+| FishNet: Networking Evolved 4.7.3 | FirstGearGames, https://github.com/FirstGearGames/FishNet | `Packages` (git-пакет `com.firstgeargames.fishnet`) | собственная лицензия FishNet (LICENSE.md в репозитории) | да: бесплатно и без роялти для игр; запрещено использовать в конкурирующих сетевых библиотеках | claude, 2026-10-30 |

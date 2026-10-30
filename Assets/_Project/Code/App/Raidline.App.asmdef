@@ -8,7 +8,8 @@
     "Raidline.Gameplay",
     "Raidline.AI",
     "Raidline.Presentation",
-    "Raidline.UI"
+    "Raidline.UI",
+    "FishNet.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

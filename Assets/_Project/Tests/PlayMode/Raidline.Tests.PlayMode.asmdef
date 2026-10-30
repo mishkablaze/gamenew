@@ -11,7 +11,8 @@
     "Raidline.UI",
     "Raidline.App",
     "UnityEngine.TestRunner",
-    "UnityEditor.TestRunner"
+    "UnityEditor.TestRunner",
+    "FishNet.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

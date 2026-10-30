@@ -10,9 +10,10 @@
 2. **Симуляция отдельно от отображения.** Геймплей никогда не зависит от эффектов, звука, анимаций и UI. Отображение подписывается на события симуляции.
 3. **Один код для игрока и бота.** Персонаж — это набор компонентов, которым управляет источник ввода: игрок или мозг бота.
 4. **Все изменения состояния — через команды.** UI и ввод ничего не меняют напрямую: они отправляют команду, авторитет (сейчас локальный, потом сервер) её проверяет и применяет.
-5. **Фиксированный тик.** Геймплей считается с частотой 60 Гц, камера и рендер обновляются каждый кадр с интерполяцией.
+5. **Фиксированный сетевой тик.** Геймплей считается в тике `TimeManager` Fish-Net (60 Гц), камера и рендер обновляются каждый кадр с интерполяцией.
 6. **Ноль аллокаций в горячих путях.** Пулы, структуры, заранее выделенные буферы.
 7. **Явные зависимости.** Без DI-фреймворков и без статических синглтонов с изменяемым состоянием. Сервисы создаёт composition root и передаёт явно.
+8. **Сеть с первого дня (Fish-Net, D-017).** Сервер авторитетен; одиночная игра — режим хоста. Правила игры в Core о сети не знают.
 
 ---
 
@@ -80,12 +81,14 @@ Editor → ссылается на всё, только Editor-платформ�
 | `Raidline.Core` | — | `noEngineReferences: true`; C# 9; без LINQ в горячих путях |
 | `Raidline.Infrastructure` | Core, Unity.InputSystem | TickRunner, UpdateRunner, пулы, файловый IO, логи |
 | `Raidline.Data` | Core | ScriptableObject-реализации интерфейсов Core |
-| `Raidline.Gameplay` | Core, Infrastructure, Data | авторитетная симуляция |
-| `Raidline.AI` | Core, Infrastructure, Data, Gameplay | мозги ботов работают через `ICharacterInput` |
-| `Raidline.Presentation` | Core, Infrastructure, Data, Gameplay | в серверной сборке не нужна |
-| `Raidline.UI` | Core, Infrastructure, Data, Gameplay | читает состояние, отправляет команды |
-| `Raidline.App` | все выше | Boot, переходы, создание контекстов |
-| `Raidline.Editor` | все | только `Editor` |
+| `Raidline.Gameplay` | Core, Infrastructure, Data, **FishNet.Runtime** | авторитетная симуляция, NetworkBehaviour-ы, `Gameplay/Networking` |
+| `Raidline.AI` | Core, Infrastructure, Data, Gameplay, FishNet.Runtime | мозги ботов работают через `ICharacterInput`, только на сервере |
+| `Raidline.Presentation` | Core, Infrastructure, Data, Gameplay, FishNet.Runtime | в серверной сборке не нужна |
+| `Raidline.UI` | Core, Infrastructure, Data, Gameplay, FishNet.Runtime | читает состояние, отправляет команды |
+| `Raidline.App` | все выше + FishNet.Runtime | Boot, NetworkManager, переходы, создание контекстов |
+| `Raidline.Editor` | все + FishNet.Runtime | только `Editor` |
+
+Core, Infrastructure и Data на Fish-Net **не ссылаются** (D-017).
 
 **Правило:** нижний слой никогда не ссылается на верхний. Если Gameplay должен «сообщить» Presentation или UI, он публикует событие (§6).
 
@@ -108,8 +111,8 @@ Editor → ссылается на всё, только Editor-платформ�
 
 ### Контексты и время жизни сервисов
 
-- **`AppContext`** живёт всю сессию и создаётся `AppRoot`: `TickRunner`, `UpdateRunner`, `InputService`, `SaveService`, `SettingsService`, `ItemDatabase`, `AudioService`, `SceneFlow`, `Log`.
-- **`RaidContext`** живёт один рейд и создаётся `RaidRoot`: `EntityRegistry`, `RaidEventBus`, `BallisticsSystem`, `NoiseBus`, `BotManager`, `LootSpawner`, `ExtractionSystem`, `RaidSession`, `Rng` (seed рейда).
+- **`AppContext`** живёт всю сессию и создаётся `AppRoot`: `NetworkManager` (Fish-Net: TimeManager, ServerManager, ClientManager, транспорт Tugboat), `SessionLauncher` (офлайн = хост на 127.0.0.1), `TickRunner`, `UpdateRunner`, `InputService`, `SaveService`, `SettingsService`, `ItemDatabase`, `AudioService`, `SceneFlow`, `Log`.
+- **`RaidContext`** живёт один рейд и создаётся `RaidRoot`. Серверная часть: `EntityRegistry`, `RaidEventBus`, `BallisticsSystem`, `NoiseBus`, `BotManager`, `LootSpawner`, `ExtractionSystem`, `RaidSession`, `Rng` (seed рейда). Клиентская часть: `RaidEventBus` для отображения, косметическая баллистика (трассеры), HUD. В режиме хоста в процессе есть обе.
 
 MonoBehaviour-компоненты получают зависимости методом `Init(RaidContext ctx)` (или `Init(AppContext)`), который вызывает root или фабрика. `FindObjectOfType`, `GameObject.Find` и статические `Instance` для геймплейного состояния **запрещены**.
 
@@ -117,30 +120,34 @@ MonoBehaviour-компоненты получают зависимости ме�
 
 ## 5. Время: тик и обновления
 
-### Тик симуляции
+### Тик симуляции (Fish-Net, D-007, D-017)
 
-- `Raidline.Core.Time.TickClock` — чистый аккумулятор: `dt = 1/60`, максимум 4 тика за кадр (защита от «спирали смерти»), отдаёт `alpha` для интерполяции. Покрыт тестами.
-- `TickRunner` (Infrastructure) — один MonoBehaviour, который каждый кадр крутит `TickClock` и вызывает `ITickable.Tick(in TickContext ctx)` **по фазам в фиксированном порядке**:
+- Источник тика — `TimeManager` Fish-Net: **60 Гц**, **Physics Mode = TimeManager** (физика шагает внутри сетевого тика, а не в `FixedUpdate`).
+- `ITickSource` (Infrastructure) — абстракция «пришёл тик». Реализации:
+  - `NetworkTickSource` (`Gameplay/Networking`) подписан на `TimeManager.OnTick` и передаёт номер тика и `dt`;
+  - `LocalTickSource` (Infrastructure) крутит чистый `Raidline.Core.Time.TickClock` (аккумулятор `dt = 1/60`, не больше 4 тиков за кадр, `alpha`) — для EditMode/PlayMode-тестов и инструментов без сети.
+- `TickRunner` (Infrastructure) по каждому тику источника вызывает `ITickable.Tick(in TickContext ctx)` **по фазам в фиксированном порядке**:
 
 ```
-1. Input        — снимок ввода в CharacterInputFrame (игрок и боты)
-2. Characters   — движение, выносливость, состояние позы
+1. Input        — снимок ввода в CharacterInputFrame (игрок; у ботов — мозг на сервере)
+2. Characters   — движение (Replicate/Reconcile), выносливость, поза
 3. Weapons      — стрельба, перезарядка, отдача (выпуск снарядов)
-4. Physics      — Physics.Simulate(dt)  (Physics.simulationMode = Script)
-5. Ballistics   — перемещение снарядов, raycast-сегменты, попадания
-6. Damage       — применение урона, эффекты здоровья
-7. AI           — мозги ботов (по бюджету и LOD, §12)
-8. Raid         — таймер, эвакуация, спавны
+4. Physics      — делает TimeManager (Physics Mode = TimeManager)
+5. Ballistics   — перемещение снарядов, raycast-сегменты, попадания (сервер)
+6. Damage       — применение урона, эффекты здоровья (сервер)
+7. AI           — мозги ботов (сервер, по бюджету и LOD, §12)
+8. Raid         — таймер, эвакуация, спавны (сервер)
 ```
 
+- `TickContext` содержит номер тика, `dt` и флаги `IsServer`, `IsOwner`, `IsReplaying` (повтор тика при согласовании предсказания). Системы, у которых есть побочные эффекты вне предсказания (звук, эффекты, события UI), при `IsReplaying` их не выполняют.
 - Ввод мыши и поворот камеры применяются **каждый кадр** (а не каждый тик), чтобы не было задержки ввода. В симуляцию передаётся итоговый угол на момент тика.
-- Визуальные объекты интерполируют позицию между двумя последними тиками по `alpha`.
+- Визуальные объекты сглаживаются между тиками средствами Fish-Net (графический объект персонажа отделён от сетевого корня).
 
 ### Обычные обновления
 
 `UpdateRunner` — один MonoBehaviour на `Update`/`LateUpdate`, который вызывает зарегистрированные `IFrameUpdatable` и `ILateFrameUpdatable`. Компоненты регистрируются в `OnEnable` и снимаются в `OnDisable`. Свои `Update()` в сотнях компонентов не пишем.
 
-**Геймплейная логика в `Update` / `LateUpdate` / `FixedUpdate` запрещена**: только в `ITickable`. В `Update` допустимы отображение, UI и камера.
+**Геймплейная логика в `Update` / `LateUpdate` / `FixedUpdate` запрещена**: только в `ITickable` (или в Replicate-методе Fish-Net, который вызывается из тика). В `Update` допустимы отображение, UI и камера.
 
 ---
 
@@ -148,23 +155,27 @@ MonoBehaviour-компоненты получают зависимости ме�
 
 ### Сущности
 
-`EntityId` — `readonly struct` с `int`. Его выдаёт `EntityRegistry` персонажам, предметам в мире, контейнерам, дверям и выходам. В M10 он однозначно отображается на сетевой ID. Снаряды сущностями не являются (§9).
+- Объекты, которые видят другие игроки (персонажи, предметы в мире, контейнеры, двери, выходы, трупы), — это `NetworkObject` Fish-Net; их сетевой ID — `NetworkObject.ObjectId`.
+- `EntityId` — `readonly struct` с `int` для логики Core и событий; `EntityRegistry` (сервер) сопоставляет `EntityId ↔ NetworkObject`. Снаряды сетевыми объектами не являются (§9).
 
 ### События
 
 - `EventChannel<T> where T : struct` — типизированный канал без упаковки (boxing) и без аллокаций при публикации. Подписка — делегатом.
-- `RaidEventBus` держит каналы рейда (`ShotFired`, `ProjectileHit`, `DamageApplied`, `CharacterDied`, `ItemPickedUp`, `ExtractionProgress` …) и очищается в конце рейда.
+- `RaidEventBus` держит каналы рейда (`ShotFired`, `ProjectileHit`, `DamageApplied`, `CharacterDied`, `ItemPickedUp`, `ExtractionProgress` …) и очищается в конце рейда. Серверные события, которые нужны клиентам для отображения, рассылаются ObserversRpc и на клиенте публикуются в тот же канал.
 - UnityEvent в коде геймплея не используем.
 
-### Команды и авторитет
+### Команды и авторитет (сервер авторитетен)
 
-```
-Ввод/UI ──► Command (struct) ──► IAuthority ──► валидация в Core ──► применение ──► событие ──► UI/Presentation
-```
+| Что | Как идёт по сети |
+|---|---|
+| Движение, взгляд, кнопки персонажа | `CharacterInputFrame` → **Replicate** (предсказание на клиенте-владельце); состояние мотора → **Reconcile** |
+| Инвентарь, лут, медицина, торговля | `InventoryCommand` → **ServerRpc** → сервер валидирует в Core и применяет → изменения владельцу (TargetRpc/SyncType) |
+| Урон, смерть, эффекты здоровья | только сервер; клиентам — SyncVar/SyncType здоровья и события через ObserversRpc |
+| Рейд: таймер, выходы, спавны | только сервер; клиентам — SyncVar/ObserversRpc |
 
-- Персонаж получает `CharacterInputFrame` (движение, взгляд, кнопки) от `ICharacterInput`: `PlayerInputSource` или `BotBrain`.
-- Инвентарь меняется только через `InventoryService.Execute(in InventoryCommand cmd)` и возвращает `InventoryResult` (успех или код ошибки).
-- `IAuthority` сейчас реализован как `LocalAuthority` (применяет сразу). В M10 появится `ServerAuthority` / `ClientProxy`.
+- Персонаж получает `CharacterInputFrame` от `ICharacterInput`: `PlayerInputSource` (клиент-владелец) или `BotBrain` (сервер).
+- `InventoryService.Execute(in InventoryCommand cmd)` выполняется **на сервере** и возвращает `InventoryResult`. UI клиента только отправляет команду и отображает результат.
+- В режиме хоста всё это идёт тем же путём, просто внутри одного процесса.
 
 ---
 
@@ -184,8 +195,8 @@ MonoBehaviour-компоненты получают зависимости ме�
 Персонаж одинаков для игрока и бота:
 
 ```
-Character (root, EntityId)
-├─ CharacterMotor        CharacterController, движение по тику, поза, наклон, высота приседа, инерция
+Character (root, NetworkObject + EntityId)
+├─ CharacterMotor        NetworkBehaviour: Replicate/Reconcile; CharacterController, поза, наклон, высота приседа, инерция
 ├─ CharacterStamina      обёртка над Core StaminaState
 ├─ CharacterHealth       обёртка над Core HealthState, принимает DamageInfo
 ├─ CharacterEquipment    обёртка над Core Equipment (инвентарь, вес)
@@ -203,6 +214,9 @@ Character (root, EntityId)
 ## 9. Оружие и баллистика
 
 ### Поток выстрела
+
+Выстрел проходит в два слоя. **Сервер** считает настоящие снаряды и попадания. **Клиент-владелец** сразу показывает вспышку, звук и косметический трассер (без ожидания сервера), остальные клиенты получают `ShotFired` через ObserversRpc и рисуют косметику у себя. Косметические снаряды попаданий не засчитывают.
+
 
 ```
 CharacterInputFrame.Fire
@@ -278,6 +292,7 @@ ItemLocation = Grid(containerUid, gridIndex, x, y, rotated) | Slot(ownerUid, slo
 
 ## 12. ИИ
 
+- ИИ работает **только на сервере** (в режиме хоста — в том же процессе). Боты — сетевые персонажи без владельца-клиента.
 - **`BotManager`** — общий бюджет времени ИИ на кадр (по умолчанию 1.5 мс на минимальной конфигурации). Боты обслуживаются по кругу.
 - **LOD обновлений** по дистанции до игрока:
 
@@ -328,17 +343,17 @@ ItemLocation = Grid(containerUid, gridIndex, x, y, rotated) | Slot(ownerUid, slo
 
 ---
 
-## 16. Сетевая готовность (правила с первого дня)
+## 16. Сеть (Fish-Net, D-017)
 
-1. Состояние геймплея живёт в симуляции (Core и Gameplay), а не в визуальных объектах.
-2. Любое изменение — через `CharacterInputFrame` или команду (`InventoryCommand` и др.).
-3. Геймплей считается только в тике, никакой логики в `Update`.
-4. Случайность — только через переданный `Rng` с seed, `UnityEngine.Random` в геймплее запрещён.
-5. Gameplay не зависит от Presentation и UI.
-6. У всего, что будет реплицироваться, есть `EntityId`.
-7. Будущий define `RAIDLINE_SERVER` позволит вырезать Presentation и UI из серверной сборки.
-
-Выбор сетевого стека (Netcode for GameObjects, Fish-Net, Photon Fusion 2 и др.) откладываем до M10 (T-1001).
+1. **Сервер авторитетен.** Боты, баллистика, урон, инвентарь, лут и рейд считаются на сервере; клиент шлёт ввод (Replicate) и команды (ServerRpc).
+2. **Одиночная игра — режим хоста** (Tugboat на 127.0.0.1). Отдельного «офлайн-кода» нет.
+3. **Правила — в Core**, без ссылок на Fish-Net: NetworkBehaviour-ы в Gameplay только переводят сетевые вызовы в вызовы Core.
+4. Геймплей считается только в тике (`TimeManager`), никакой логики в `Update`.
+5. Случайность — только через переданный `Rng` с seed; seed рейда знает сервер. `UnityEngine.Random` в геймплее запрещён.
+6. Gameplay не зависит от Presentation и UI; Presentation и UI не меняют сетевое состояние напрямую.
+7. Каждый Replicate-метод детерминирован относительно своего ввода и состояния (повторяется при согласовании).
+8. В M10 серверная сборка (headless Linux) вырезает Presentation и UI (define `RAIDLINE_SERVER`; в Pro — автоматическое вырезание серверного кода из клиента).
+9. Компенсация задержки (откат хитбоксов к моменту выстрела) — Fish-Net Pro, подключаем к PvP (T-1002). До этого попадания считаются по текущему состоянию сервера.
 
 ---
 
