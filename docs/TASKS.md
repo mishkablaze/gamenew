@@ -14,7 +14,7 @@
 | T-003 | Структура папок и asmdef | claude | review | всё (каркас) | T-001 |
 | T-004 | Тестовая инфраструктура: dotnet CoreTests + скрипты | claude | review | tools, Tests/Core | T-003 |
 | T-005 | Установить пакеты | human | done | Packages | T-001 |
-| T-006 | Bootstrap: контексты, NetworkManager (хост), тик, апдейт-раннер, пулы, события, Rng | claude | todo | Core/Common, Core/Time, Infrastructure, Gameplay/Networking, App | T-003, T-004, T-009 |
+| T-006 | Bootstrap: контексты, NetworkManager (хост), тик, апдейт-раннер, пулы, события, Rng | claude | review | Core/Common, Core/Timing, Infrastructure, Gameplay/Networking, App | T-003, T-004, T-009 |
 | T-007 | URP-пресеты, слои, матрица физики | human | todo | Settings | T-005 |
 | T-008 | Ввод: InputActions, InputService, CharacterInputFrame | codex | todo | Infrastructure/Input | T-005, T-006 |
 | T-009 | Установить Fish-Net 4.7.3, ссылки в asmdef | claude | done | Packages, asmdef | T-005 |
@@ -159,9 +159,9 @@ Fish-Net 4.7.3 из git (`https://github.com/FirstGearGames/FishNet.git?path=Ass
 
 #### T-006 · Bootstrap
 **Сделать:**
-- Core (`Core/Common`, `Core/Time`): `EntityId`, `Rng` (детерминированный PCG/xorshift с seed; методы `NextFloat`, `Range`, `Chance`), `TickClock` (dt 1/60, максимум 4 тика за кадр, `alpha`), `EventChannel<T> where T : struct`, `Result`/коды ошибок.
+- Core (`Core/Common`, `Core/Timing`): `EntityId`, `Rng` (детерминированный PCG/xorshift с seed; методы `NextFloat`, `Range`, `Chance`), `TickClock` (dt 1/60, максимум 4 тика за кадр, `alpha`), `EventChannel<T> where T : struct`, `Result`/коды ошибок.
 - Infrastructure: `TickRunner` с фазами из ARCHITECTURE §5 и регистрацией `ITickable` по фазе; `UpdateRunner`; `Log` с категориями и `[Conditional("RAIDLINE_DEV")]`; `ObjectPool<T>` и `ComponentPool<T>`; `ProfilerMarker` на каждую фазу.
-- Infrastructure: `ITickSource` и `LocalTickSource` (на `TickClock`, для тестов и инструментов без сети); `TickContext` с номером тика, `dt`, `IsServer`, `IsOwner`, `IsReplaying`.
+- Infrastructure: `ITickSource` и `LocalTickSource` (на `TickClock`, для тестов и инструментов без сети); `TickContext` с номером тика, `dt`, `IsServer`, `IsClient`, `IsReplaying`.
 - Gameplay/Networking: `NetworkTickSource` — подписка на `TimeManager.OnTick` Fish-Net.
 - App: `AppRoot` (Boot-сцена, `DontDestroyOnLoad`) создаёт `AppContext`; `SessionLauncher.StartOffline()` — хост Fish-Net (Tugboat на 127.0.0.1, сервер и клиент в одном процессе); заготовка `SceneFlow`; редакторный скрипт `Raidline/Setup/Create Boot Scene`, который создаёт Boot-сцену с `NetworkManager` (TimeManager: 60 Гц, Physics Mode = TimeManager; транспорт Tugboat).
 

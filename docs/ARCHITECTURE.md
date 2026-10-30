@@ -123,10 +123,10 @@ MonoBehaviour-компоненты получают зависимости ме�
 ### Тик симуляции (Fish-Net, D-007, D-017)
 
 - Источник тика — `TimeManager` Fish-Net: **60 Гц**, **Physics Mode = TimeManager** (физика шагает внутри сетевого тика, а не в `FixedUpdate`).
-- `ITickSource` (Infrastructure) — абстракция «пришёл тик». Реализации:
-  - `NetworkTickSource` (`Gameplay/Networking`) подписан на `TimeManager.OnTick` и передаёт номер тика и `dt`;
-  - `LocalTickSource` (Infrastructure) крутит чистый `Raidline.Core.Time.TickClock` (аккумулятор `dt = 1/60`, не больше 4 тиков за кадр, `alpha`) — для EditMode/PlayMode-тестов и инструментов без сети.
-- `TickRunner` (Infrastructure) по каждому тику источника вызывает `ITickable.Tick(in TickContext ctx)` **по фазам в фиксированном порядке**:
+- `ITickSource` (Infrastructure) — абстракция «пришёл тик» с двумя событиями на каждый тик: `PrePhysicsTick` и `PostPhysicsTick`. Реализации:
+  - `NetworkTickSource` (`Gameplay/Networking`): `TimeManager.OnTick` → `PrePhysicsTick`, затем Fish-Net шагает физику, затем `TimeManager.OnPostTick` → `PostPhysicsTick`;
+  - `LocalTickSource` (Infrastructure) крутит чистый `Raidline.Core.Timing.TickClock` (аккумулятор `dt = 1/60`, не больше 4 тиков за кадр, `alpha`) и по желанию вызывает шаг физики между событиями — для EditMode/PlayMode-тестов и инструментов без сети.
+- `TickRunner` (Infrastructure, обычный C#-класс) по каждому тику источника вызывает `ITickable.Tick(in TickContext ctx)` **по фазам в фиксированном порядке**: фазы 1–3 — на `PrePhysicsTick`, фазы 5–8 — на `PostPhysicsTick`, так что баллистика видит коллайдеры, уже сдвинутые в этом тике:
 
 ```
 1. Input        — снимок ввода в CharacterInputFrame (игрок; у ботов — мозг на сервере)
@@ -139,7 +139,7 @@ MonoBehaviour-компоненты получают зависимости ме�
 8. Raid         — таймер, эвакуация, спавны (сервер)
 ```
 
-- `TickContext` содержит номер тика, `dt` и флаги `IsServer`, `IsOwner`, `IsReplaying` (повтор тика при согласовании предсказания). Системы, у которых есть побочные эффекты вне предсказания (звук, эффекты, события UI), при `IsReplaying` их не выполняют.
+- `TickContext` содержит номер тика, `dt` и флаги `IsServer`, `IsClient`, `IsReplaying` (повтор тика при согласовании предсказания). Владение — свойство объекта (`NetworkObject.IsOwner`), а не тика. Системы, у которых есть побочные эффекты вне предсказания (звук, эффекты, события UI), при `IsReplaying` их не выполняют.
 - Ввод мыши и поворот камеры применяются **каждый кадр** (а не каждый тик), чтобы не было задержки ввода. В симуляцию передаётся итоговый угол на момент тика.
 - Визуальные объекты сглаживаются между тиками средствами Fish-Net (графический объект персонажа отделён от сетевого корня).
 

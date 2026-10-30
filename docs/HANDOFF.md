@@ -65,3 +65,24 @@
 **Допущения:** офлайн — хост через Tugboat на 127.0.0.1 (Yak — Pro). Если macOS или Windows покажут запрос брандмауэра, переделаем привязку в T-006.
 **Вопросы к человеку:** нет.
 **Затронуто вне модуля:** `Packages/manifest.json`, `ProjectSettings/ProjectSettings.asset` (символы Fish-Net), `Assets/DefaultPrefabObjects.asset`.
+
+## 2026-10-30 · claude · T-006 · review
+**Сделано (ветка `claude/T-006-bootstrap`):**
+- **Core** (`Core/Common`, `Core/Timing` — папка переименована из `Time`, чтобы namespace не путался с `UnityEngine.Time`): `EntityId` + `EntityIdAllocator`, `Rng` (PCG32 XSH-RR; эталонные значения pcg32(42, 54) совпадают), `Result<TError>`, `SafeIterationList<T>` (изменения во время обхода без аллокаций), `EventChannel<T>` + `EventListener<T>`, `ObjectPool<T>`, `TickClock`.
+- **Infrastructure:** `TickPhase` / `TickStage` / `TickPhases`, `TickContext` (`IsServer`, `IsClient`, `IsReplaying`), `ITickable`, `ITickSource` с двумя событиями на тик (`PrePhysicsTick` / `PostPhysicsTick`), `TickRunner` (обычный класс, `ProfilerMarker` на каждую фазу), `LocalTickSource`, `UpdateRunner`, `Log` + `LogCategory`, `ComponentPool<T>`, `TickRateMeter`.
+- **Gameplay/Networking:** `NetworkTickSource`: `TimeManager.OnTick` → фазы до физики, шаг физики Fish-Net, `OnPostTick` → фазы после физики.
+- **App/Boot:** `AppRoot` (composition root, 60 Гц, `PhysicsMode.TimeManager`, `DontDestroyOnLoad`), `AppContext`, `SessionLauncher` (офлайн = хост, Tugboat только на 127.0.0.1 / ::1).
+- **Editor:** меню `Raidline/Setup/Create Boot Scene` — создало `Assets/_Project/Scenes/Boot.unity` (NetworkManager + TimeManager 60 Гц/TimeManager physics + TransportManager/Tugboat + UpdateRunner + AppRoot) и поставило её первой в Build Settings.
+- **Тесты:** Core 72, EditMode 17 (TickRunner, LocalTickSource, UpdateRunner, ComponentPool), PlayMode 1 (`BootSceneTests`: загрузка Boot, хост поднялся, 55–65 тиков/с, фазы до и после физики в одном тике, `Physics.simulationMode == Script`).
+**Как проверить:** Test Runner → EditMode → Run All (89/89), PlayMode → Run All (1/1). Открыть `Boot.unity` → Play: в консоли `[Tick] Measured tick rate: 60.0 ticks/s; host ready: True`.
+**Результаты у меня (Unity 6000.6.7f1, MacBook Air):** EditMode 89/89, PlayMode 1/1, замер 60.0 тиков/с, ошибок и предупреждений компиляции нет.
+**Не проверено / ограничения:**
+- не запускалось: `tools/test-core.sh` (dotnet) — в моей среде нет .NET; Core-тесты прошли в Unity. Codex, прогони на ревью.
+- Аллокации проверены только для `EventChannel.Publish` (Unity-ограничение `Is.Not.AllocatingGCMemory`, в dotnet этот тест выключен через `#if UNITY_5_3_OR_NEWER`). Профайлером «0 Б GC в пустой сцене» не мерил.
+- Запрос брандмауэра macOS при запуске хоста не появился (привязка к loopback).
+**Допущения:**
+- Fish-Net при `PhysicsMode.TimeManager` сохранил `Physics.simulationMode = Script` в `ProjectSettings/DynamicsManager.asset` и `Physics2DSettings.asset`: физика вне сетевого тика сама больше не шагает. Это соответствует D-007.
+- `Log.Dev` компилируется в редакторе, development-сборках и с `RAIDLINE_DEV` (несколько `[Conditional]`), чтобы не менять настройки проекта ради define.
+- Ветка сделана в основной рабочей папке (не в `.worktrees/claude`), потому что Unity открыт именно в ней, а мне нужно было компилировать и гонять тесты. **Рабочая папка сейчас на ветке `claude/T-006-bootstrap`.**
+**Вопросы к человеку:** нет. Для мержа: `git checkout main && git merge claude/T-006-bootstrap`.
+**Затронуто вне модуля:** `ProjectSettings/EditorBuildSettings.asset` (Boot первой), `DynamicsManager.asset` / `Physics2DSettings.asset` (режим симуляции), docs: ARCHITECTURE §5, CONVENTIONS §2, TASKS (T-006).
