@@ -9,11 +9,11 @@
 | ID | Задача | Владелец | Статус | Модуль | Зависит от |
 |---|---|---|---|---|---|
 | **M0** | **Фундамент** | | | | |
-| T-001 | Установить Unity, создать проект, git + LFS, worktree | human | todo | — | — |
+| T-001 | Установить Unity, создать проект, git + LFS, worktree | human | done | — | — |
 | T-002 | Документы, .gitignore, .gitattributes, .editorconfig | claude | review | docs | — |
 | T-003 | Структура папок и asmdef | claude | review | всё (каркас) | T-001 |
 | T-004 | Тестовая инфраструктура: dotnet CoreTests + скрипты | claude | review | tools, Tests/Core | T-003 |
-| T-005 | Установить пакеты | human | todo | Packages | T-001 |
+| T-005 | Установить пакеты | human | done | Packages | T-001 |
 | T-006 | Bootstrap: контексты, тик, апдейт-раннер, пулы, события, Rng | claude | todo | Core/Common, Infrastructure, App | T-003, T-004 |
 | T-007 | URP-пресеты, слои, матрица физики | human | todo | Settings | T-005 |
 | T-008 | Ввод: InputActions, InputService, CharacterInputFrame | codex | todo | Infrastructure/Input | T-005, T-006 |
