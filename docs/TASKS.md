@@ -74,7 +74,7 @@
 | T-704 | Задания | codex | todo | Core/Quests, UI/Quests | T-701 |
 | T-705 | Главное меню и поток экранов | claude | todo | App, UI/Menus | T-603, T-702 |
 | **M8** | **Карта, арт, звук** | | | | |
-| T-801 | Дизайн-документ карты MAP01 | claude | todo | docs/maps | — |
+| T-801 | Дизайн-документ карты MAP01 | claude | review | docs/maps | — |
 | T-802 | Блокаут карты | human | todo | Scenes | T-105, T-801 |
 | T-803 | Low-poly кит и палитра | human | todo | Content | T-804 |
 | T-804 | AssetPostprocessor и валидатор бюджетов | codex | todo | Editor | T-003 |
